@@ -8,6 +8,7 @@
 
 const int SCREEN_WIDTH  = 640;
 const int SCREEN_HEIGHT = 480;
+const int SCREEN_FPS = 30;
 
 jack_port_t *in_r, *in_g, *in_b;
 jack_nframes_t samplerate;
@@ -28,16 +29,16 @@ void jack_shutdown(void *arg)
     ensure(0, "jack_shutdown");
 }
 
-float clamp(float v)
+uint8_t clamp_u8(int v)
 {
-    const float min = -1.0f;
-    const float max = +1.0f;
-    const float t = v < min ? min : v;
-    return t > max ? max : t;
+    if (v < 0) return 0;
+    if (v > 255) return 255;
+    return v;
 }
 
 int jack_process(jack_nframes_t nframes, void *arg)
 {
+    const int speed = SCREEN_WIDTH * SCREEN_HEIGHT * SCREEN_FPS / samplerate;
     static int x = 0, y = 0;
     jack_default_audio_sample_t *sr, *sg, *sb;
     uint8_t r, g, b;
@@ -46,12 +47,11 @@ int jack_process(jack_nframes_t nframes, void *arg)
     sg = jack_port_connected(in_g) > 0 ? jack_port_get_buffer(in_g, nframes) : 0;
     sb = jack_port_connected(in_b) > 0 ? jack_port_get_buffer(in_b, nframes) : 0;
     for (int i = 0; i < nframes; i++) {
-
-        r = sr ? abs(clamp(sr[i]) * 255) : 0;
-        g = sg ? abs(clamp(sg[i]) * 255) : 0;
-        b = sb ? abs(clamp(sb[i]) * 255) : 0;
+        r = sr ? clamp_u8(sr[i] * 255 + 128) : 0;
+        g = sg ? clamp_u8(sg[i] * 255 + 128) : 0;
+        b = sb ? clamp_u8(sb[i] * 255 + 128) : 0;
         c = (r << 24) | (g << 16) | (b << 8) | 0xff;
-        for (int j = 0; j < 256; j++) {
+        for (int j = 0; j < speed; j++) {
             pixels[x + y * surface->pitch / sizeof(uint32_t)] = c;
             x++;
             if (x >= SCREEN_WIDTH) {
@@ -124,6 +124,6 @@ int main(int argc, char **argv)
     SDL_Quit();
 
     jack_client_close (client);
-    
+
     return 0;
 }
